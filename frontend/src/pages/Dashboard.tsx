@@ -1,484 +1,481 @@
-import React, { useEffect, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
- Box,
- Alert,
- Button,
- CircularProgress,
- Typography,
- Card,
- CardContent,
- Dialog,
- DialogTitle,
- DialogContent,
- DialogActions,
- FormControl,
- InputLabel,
- Select,
- MenuItem,
- TextField,
- Chip,
- Stack
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControl,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Select,
+  Skeleton,
+  Snackbar,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../api/auth'
-import { AccountType, createAccount, getMyAccounts } from '../api/accounts'
+import { AccountResponse, AccountType, createAccount, getMyAccounts } from '../api/accounts'
 import { createTransfer, getMyTransactions, TransactionResponse } from '../api/transactions'
 
+type TxFilter = 'ALL' | 'COMPLETED' | 'FAILED' | 'PENDING'
+
 export default function Dashboard() {
- const navigate = useNavigate()
- const queryClient = useQueryClient()
- const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
- const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
- const [accountType, setAccountType] = useState<AccountType>('CHECKING')
- const [currency, setCurrency] = useState('USD')
- const [createError, setCreateError] = useState<string | null>(null)
- const [transferError, setTransferError] = useState<string | null>(null)
- const [transferSuccess, setTransferSuccess] = useState<string | null>(null)
- const [selectedSourceAccountId, setSelectedSourceAccountId] = useState('')
- const [destinationAccountId, setDestinationAccountId] = useState('')
- const [transferAmount, setTransferAmount] = useState('')
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
+  const [accountType, setAccountType] = useState<AccountType>('CHECKING')
+  const [currency, setCurrency] = useState('USD')
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [transferError, setTransferError] = useState<string | null>(null)
+  const [transferSuccess, setTransferSuccess] = useState<string | null>(null)
+  const [copySuccess, setCopySuccess] = useState<string | null>(null)
+  const [selectedSourceAccountId, setSelectedSourceAccountId] = useState('')
+  const [destinationAccountId, setDestinationAccountId] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [historyFilter, setHistoryFilter] = useState<TxFilter>('ALL')
+  const [showOwnAccountDestinations, setShowOwnAccountDestinations] = useState(false)
+  const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({})
 
- const query = useQuery({
-   queryKey: ['current-user'],
-   queryFn: getCurrentUser,
-   retry: false
- })
+  const query = useQuery({
+    queryKey: ['current-user'],
+    queryFn: getCurrentUser,
+    retry: false
+  })
 
- const accountsQuery = useQuery({
-   queryKey: ['accounts'],
-   queryFn: getMyAccounts,
-   retry: false
- })
+  const accountsQuery = useQuery({
+    queryKey: ['accounts'],
+    queryFn: getMyAccounts,
+    retry: false
+  })
 
- const transactionsQuery = useQuery({
-   queryKey: ['transactions'],
-   queryFn: getMyTransactions,
-   retry: false
- })
+  const transactionsQuery = useQuery({
+    queryKey: ['transactions'],
+    queryFn: getMyTransactions,
+    retry: false
+  })
 
- const createAccountMutation = useMutation({
-   mutationFn: createAccount,
-   onSuccess: () => {
-     setIsCreateDialogOpen(false)
-     setAccountType('CHECKING')
-     setCurrency('USD')
-     setCreateError(null)
-     queryClient.invalidateQueries({
-       queryKey: ['accounts']
-     })
-   }
- })
+  const createAccountMutation = useMutation({
+    mutationFn: createAccount,
+    onSuccess: () => {
+      setIsCreateDialogOpen(false)
+      setAccountType('CHECKING')
+      setCurrency('USD')
+      setCreateError(null)
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    }
+  })
 
- const transferMutation = useMutation({
-   mutationFn: createTransfer,
-   onSuccess: (transaction) => {
-     setIsTransferDialogOpen(false)
-     setSelectedSourceAccountId('')
-     setDestinationAccountId('')
-     setTransferAmount('')
-     setTransferError(null)
-     setTransferSuccess(
-       `Transfer of ${formatAmount(Number(transaction.amount), transaction.currency)} ${transaction.currency} was submitted successfully.`
-     )
-     queryClient.invalidateQueries({ queryKey: ['accounts'] })
-     queryClient.invalidateQueries({ queryKey: ['transactions'] })
-   }
- })
+  const transferMutation = useMutation({
+    mutationFn: createTransfer,
+    onSuccess: () => {
+      setIsTransferDialogOpen(false)
+      setSelectedSourceAccountId('')
+      setDestinationAccountId('')
+      setTransferAmount('')
+      setTransferError(null)
+      setTransferSuccess('Transfer completed successfully.')
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    }
+  })
 
- useEffect(() => {
-   const userStatus = (query.error as any)?.response?.status
-   const accountsStatus = (accountsQuery.error as any)?.response?.status
-   if (userStatus === 401 || accountsStatus === 401) {
-     localStorage.removeItem('finflow_access_token')
-     navigate('/login')
-   }
- }, [query.error, accountsQuery.error, navigate])
+  const user = query.data
+  const accounts = accountsQuery.data ?? []
+  const transactions = transactionsQuery.data ?? []
+  const selectedSourceAccount = accounts.find((account) => account.id === selectedSourceAccountId) ?? null
+  const filteredTransactions = useMemo(() => {
+    if (historyFilter === 'ALL') return transactions
+    return transactions.filter((transaction) => transaction.status === historyFilter)
+  }, [historyFilter, transactions])
 
- useEffect(() => {
-   if (!accountsQuery.data || accountsQuery.data.length === 0) {
-     if (selectedSourceAccountId) {
-       setSelectedSourceAccountId('')
-     }
-     return
-   }
+  React.useEffect(() => {
+    const userStatus = (query.error as any)?.response?.status
+    const accountsStatus = (accountsQuery.error as any)?.response?.status
+    if (userStatus === 401 || accountsStatus === 401) {
+      localStorage.removeItem('finflow_access_token')
+      navigate('/login')
+    }
+  }, [query.error, accountsQuery.error, navigate])
 
-   if (!selectedSourceAccountId || !accountsQuery.data.some((account) => account.id === selectedSourceAccountId)) {
-     setSelectedSourceAccountId(accountsQuery.data[0].id)
-   }
- }, [accountsQuery.data, selectedSourceAccountId])
+  React.useEffect(() => {
+    if (!accounts.length) return
+    if (!selectedSourceAccountId || !accounts.some((account) => account.id === selectedSourceAccountId)) {
+      setSelectedSourceAccountId(accounts[0].id)
+    }
+  }, [accounts, selectedSourceAccountId])
 
- function onLogout() {
-   localStorage.removeItem('finflow_access_token')
-   navigate('/login')
- }
+  function formatMoney(value: number, currencyCode: string): string {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(value)
+  }
 
- function onOpenCreateDialog() {
-   setCreateError(null)
-   setIsCreateDialogOpen(true)
- }
+  function maskAccountNumber(accountNumber: string): string {
+    return `•••• ${accountNumber.slice(-4)}`
+  }
 
- function onCloseCreateDialog() {
-   if (createAccountMutation.isPending) return
-   setIsCreateDialogOpen(false)
-   setCreateError(null)
- }
+  function shortId(value: string): string {
+    if (value.length <= 12) return value
+    return `${value.slice(0, 8)}…${value.slice(-4)}`
+  }
 
- function onCreateAccount() {
-   setCreateError(null)
-   createAccountMutation.mutate(
-     {
-       accountType,
-       currency: currency.trim().toUpperCase()
-     },
-     {
-       onError: (error: any) => {
-         const status = error?.response?.status
-         if (status === 401) {
-           localStorage.removeItem('finflow_access_token')
-           navigate('/login')
-           return
-         }
-         if (status === 400) {
-           setCreateError('Invalid account request. Please review your input.')
-           return
-         }
-         if (error?.response) {
-           setCreateError('Unable to create account. Please try again.')
-           return
-         }
-         setCreateError('Unable to reach the server.')
-       }
-     }
-   )
- }
+  function shortTransactionRef(value: string): string {
+    if (value.length <= 8) return value
+    return `…${value.slice(-4)}`
+  }
 
- function onOpenTransferDialog() {
-   setTransferError(null)
-   setTransferSuccess(null)
-   setDestinationAccountId('')
-   setTransferAmount('')
-   if (accountsQuery.data && accountsQuery.data.length > 0) {
-     setSelectedSourceAccountId(accountsQuery.data[0].id)
-   }
-   setIsTransferDialogOpen(true)
- }
+  function copyToClipboard(value: string) {
+    navigator.clipboard.writeText(value).then(() => setCopySuccess('Account ID copied')).catch(() => setCopySuccess('Unable to copy Account ID'))
+  }
 
- function onCloseTransferDialog() {
-   if (transferMutation.isPending) return
-   setIsTransferDialogOpen(false)
-   setTransferError(null)
- }
+  function onSubmitTransfer() {
+    const sourceAccount = accounts.find((account) => account.id === selectedSourceAccountId) ?? null
+    const parsedAmount = Number(transferAmount)
+    const destination = destinationAccountId.trim()
 
- function onSubmitTransfer() {
-   const trimmedDestination = destinationAccountId.trim()
-   const parsedAmount = Number(transferAmount)
-   const sourceAccount = accountsQuery.data?.find((account) => account.id === selectedSourceAccountId) ?? null
+    setTransferError(null)
 
-   setTransferError(null)
+    if (!sourceAccount) {
+      setTransferError('Please select a valid source account.')
+      return
+    }
+    if (!destination) {
+      setTransferError('Destination account ID is required.')
+      return
+    }
+    if (destination === sourceAccount.id) {
+      setTransferError('Source and destination accounts must be different.')
+      return
+    }
+    if (!transferAmount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setTransferError('Amount must be greater than zero.')
+      return
+    }
 
-   if (!sourceAccount) {
-     setTransferError('Please select a valid source account.')
-     return
-   }
+    transferMutation.mutate(
+      {
+        sourceAccountId: sourceAccount.id,
+        destinationAccountId: destination,
+        amount: parsedAmount,
+        currency: sourceAccount.currency
+      },
+      {
+        onError: (error: any) => {
+          const status = error?.response?.status
+          if (status === 400) setTransferError('Invalid transfer request.')
+          else if (status === 403) setTransferError('You are not authorized to transfer from this account.')
+          else if (status === 404) setTransferError('Destination account could not be found.')
+          else if (status === 409) setTransferError('Transfer could not be completed. Check the available balance, account status, and currency.')
+          else setTransferError('Unable to complete transfer.')
+        }
+      }
+    )
+  }
 
-   if (!trimmedDestination) {
-     setTransferError('Destination account ID is required.')
-     return
-   }
+  function onCreateAccount() {
+    setCreateError(null)
+    createAccountMutation.mutate(
+      { accountType, currency: currency.trim().toUpperCase() },
+      {
+        onError: () => setCreateError('Unable to create account.')
+      }
+    )
+  }
 
-   if (trimmedDestination === sourceAccount.id) {
-     setTransferError('Destination account must be different from the source account.')
-     return
-   }
+  const summaryCards = [
+    { label: 'Total Accounts', value: accounts.length.toString(), helper: 'Your active FinFlow accounts' },
+    {
+      label: 'Available Balance',
+      value: accounts.length === 0 ? '$0.00' : formatMoney(accounts.reduce((sum, account) => sum + Number(account.balance), 0), accounts[0]?.currency ?? 'USD'),
+      helper: 'Shown across your current currency set'
+    },
+    { label: 'Recent Transactions', value: transactions.length.toString(), helper: 'Latest ledger activity' }
+  ]
 
-   if (!transferAmount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-     setTransferError('Transfer amount must be greater than zero.')
-     return
-   }
+  const historyPage = (
+    <Card sx={{ mb: 3 }}>
+      <CardContent>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ mb: 2 }}>
+          {(['ALL', 'COMPLETED', 'FAILED', 'PENDING'] as TxFilter[]).map((filter) => (
+            <Button key={filter} variant={historyFilter === filter ? 'contained' : 'outlined'} onClick={() => setHistoryFilter(filter)}>
+              {filter}
+            </Button>
+          ))}
+        </Stack>
+        {filteredTransactions.length === 0 ? (
+          <Box sx={{ py: 5, textAlign: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>No transactions yet</Typography>
+            <Typography color="text.secondary">Your transfers will appear here.</Typography>
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>From</TableCell>
+                  <TableCell>To</TableCell>
+                  <TableCell>Date</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredTransactions.map((transaction: TransactionResponse) => (
+                  <TableRow key={transaction.id} hover>
+                    <TableCell><Chip size="small" label={transaction.status} color={transaction.status === 'COMPLETED' ? 'success' : transaction.status === 'FAILED' ? 'error' : 'warning'} /></TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{formatMoney(Number(transaction.amount), transaction.currency)}</TableCell>
+                    <TableCell><Tooltip title={transaction.sourceAccountId}><span>{shortTransactionRef(transaction.sourceAccountId)}</span></Tooltip></TableCell>
+                    <TableCell><Tooltip title={transaction.destinationAccountId}><span>{shortTransactionRef(transaction.destinationAccountId)}</span></Tooltip></TableCell>
+                    <TableCell>{new Date(transaction.createdAt).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </CardContent>
+    </Card>
+  )
 
-   transferMutation.mutate(
-     {
-       sourceAccountId: sourceAccount.id,
-       destinationAccountId: trimmedDestination,
-       amount: parsedAmount,
-       currency: sourceAccount.currency
-     },
-     {
-       onError: (error: any) => {
-         const status = error?.response?.status
-         const message = error?.response?.data?.message || error?.response?.data?.error || null
+  if (query.isPending) {
+    return <Container maxWidth="lg" sx={{ py: 4 }}><Skeleton variant="rectangular" height={320} /></Container>
+  }
 
-         if (status === 401) {
-           localStorage.removeItem('finflow_access_token')
-           navigate('/login')
-           return
-         }
+  if (query.isError || !user) {
+    return <Container maxWidth="lg" sx={{ py: 4 }}><Alert severity="error">Unable to load dashboard. Please login again.</Alert></Container>
+  }
 
-         if (status === 400) {
-           setTransferError(message || 'Invalid transfer request.')
-           return
-         }
-         if (status === 403) {
-           setTransferError('You are not authorized to transfer from that account.')
-           return
-         }
-         if (status === 404) {
-           setTransferError('Source or destination account was not found.')
-           return
-         }
-         if (status === 409) {
-           setTransferError(message || 'Transfer could not be completed. This may be due to insufficient funds, inactive account, or currency mismatch.')
-           return
-         }
-         if (error?.response) {
-           setTransferError('Unable to process this transfer at the moment.')
-           return
-         }
-         setTransferError('Unable to reach the server. Please try again.')
-       }
-     }
-   )
- }
+  return (
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4">Good morning, {user.firstName}</Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.75 }}>Here's an overview of your FinFlow accounts.</Typography>
+      </Box>
 
- if (query.isPending) {
-   return (
-     <Box sx={{ padding: 3, display: 'flex', alignItems: 'center' }}>
-       <CircularProgress size={24} sx={{ mr: 2 }} />
-       <Typography>Loading dashboard...</Typography>
-     </Box>
-   )
- }
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography variant="body2" color="text.secondary">Profile</Typography>
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
+                <Avatar sx={{ bgcolor: 'primary.main' }}>{user.firstName[0]?.toUpperCase()}</Avatar>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{user.firstName} {user.lastName}</Typography>
+                  <Typography color="text.secondary">{user.email}</Typography>
+                </Box>
+              </Stack>
+            </Box>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Chip label={user.role} variant="outlined" />
+              <Chip label={user.status} color="success" />
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
 
- if (query.isError) {
-   return (
-     <Box sx={{ maxWidth: 560, margin: '24px auto', padding: 2 }}>
-       <Alert severity="error">
-         Unable to load dashboard. Please login again.
-       </Alert>
-     </Box>
-   )
- }
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }}>
+        {summaryCards.map((card) => (
+          <Card key={card.label} sx={{ flex: 1 }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">{card.label}</Typography>
+              <Typography variant="h4" sx={{ mt: 1, fontWeight: 800 }}>{card.value}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{card.helper}</Typography>
+            </CardContent>
+          </Card>
+        ))}
+      </Stack>
 
- const user = query.data
- const accounts = accountsQuery.data ?? []
- const transactions = transactionsQuery.data ?? []
- const selectedSourceAccount = accounts.find((account) => account.id === selectedSourceAccountId) ?? null
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
+        <Button variant="contained" size="large" onClick={() => setIsTransferDialogOpen(true)} disabled={!accounts.length}>Transfer Money</Button>
+        <Button variant="outlined" size="large" onClick={() => setIsCreateDialogOpen(true)}>Create Account</Button>
+      </Stack>
 
- function maskAccountNumber(accountNumber: string): string {
-   const last4 = accountNumber.slice(-4)
-   return `•••• ${last4}`
- }
+      <Typography variant="h5" sx={{ mb: 2 }}>My Accounts</Typography>
+      {accountsQuery.isError && <Alert severity="error" sx={{ mb: 2 }}>Unable to load your accounts right now.</Alert>}
+      {accountsQuery.isPending ? (
+        <Stack spacing={2}>
+          <Skeleton variant="rectangular" height={156} />
+          <Skeleton variant="rectangular" height={156} />
+        </Stack>
+      ) : accounts.length === 0 ? (
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ textAlign: 'center', py: 6 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>No accounts yet</Typography>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>Create your first checking or savings account to get started.</Typography>
+            <Button variant="contained" onClick={() => setIsCreateDialogOpen(true)}>Create Account</Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Stack spacing={2} sx={{ mb: 4 }}>
+          {accounts.map((account: AccountResponse) => {
+            const expanded = expandedAccounts[account.id] ?? false
+            return (
+              <Card key={account.id}>
+                <CardContent>
+                  <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
+                    <Box sx={{ flex: 1 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{account.accountType}</Typography>
+                        <Chip size="small" label={account.status} color="success" />
+                      </Stack>
+                      <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5 }}>{formatMoney(Number(account.balance), account.currency)}</Typography>
+                      <Typography color="text.secondary">{account.currency}</Typography>
+                      <Typography sx={{ mt: 1.5 }}>Masked Number: <strong>{maskAccountNumber(account.accountNumber)}</strong></Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" color="text.secondary">Account ID</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{shortId(account.id)}</Typography>
+                        <Tooltip title="Copy Account ID"><IconButton size="small" onClick={() => copyToClipboard(account.id)} aria-label={`Copy account ID for ${account.accountNumber}`}>⧉</IconButton></Tooltip>
+                        <Button size="small" onClick={() => setExpandedAccounts((prev) => ({ ...prev, [account.id]: !expanded }))}>{expanded ? 'Hide Details' : 'View Details'}</Button>
+                      </Stack>
+                    </Box>
+                    <Stack spacing={1} sx={{ minWidth: { xs: '100%', md: 240 } }}>
+                      <Button variant="outlined" onClick={() => setIsTransferDialogOpen(true)}>Transfer From This Account</Button>
+                    </Stack>
+                  </Stack>
+                  {expanded && (
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
+                      <Typography variant="body2"><strong>Account ID:</strong> {account.id}</Typography>
+                      <Typography variant="body2"><strong>Account Number:</strong> {account.accountNumber}</Typography>
+                      <Typography variant="body2"><strong>Account Type:</strong> {account.accountType}</Typography>
+                      <Typography variant="body2"><strong>Currency:</strong> {account.currency}</Typography>
+                      <Typography variant="body2"><strong>Status:</strong> {account.status}</Typography>
+                      <Typography variant="body2"><strong>Created:</strong> {new Date(account.createdAt).toLocaleString()}</Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </Stack>
+      )}
 
- function formatAmount(value: number, currency: string): string {
-   return new Intl.NumberFormat('en-US', {
-     style: 'currency',
-     currency
-   }).format(value)
- }
+      <Typography variant="h5" sx={{ mb: 2 }}>Recent Transactions</Typography>
+      {transactionsQuery.isError && <Alert severity="error" sx={{ mb: 2 }}>Unable to load your transactions right now.</Alert>}
+      {transactionsQuery.isPending ? <Skeleton variant="rectangular" height={260} /> : historyPage}
 
- function formatTimestamp(value: string | null | undefined): string {
-   if (!value) return '—'
-   return new Date(value).toLocaleString()
- }
+      <Dialog open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Create Account</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {createError && <Alert severity="error">{createError}</Alert>}
+            <FormControl fullWidth>
+              <InputLabel id="account-type-label">Account Type</InputLabel>
+              <Select labelId="account-type-label" label="Account Type" value={accountType} onChange={(e) => setAccountType(e.target.value as AccountType)}>
+                <MenuItem value="CHECKING">CHECKING</MenuItem>
+                <MenuItem value="SAVINGS">SAVINGS</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)} helperText="Use 3-letter currency code." />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={onCreateAccount} disabled={createAccountMutation.isPending}>{createAccountMutation.isPending ? 'Creating...' : 'Create Account'}</Button>
+        </DialogActions>
+      </Dialog>
 
- function shortAccountRef(value: string): string {
-   return value.length <= 8 ? value : `…${value.slice(-6)}`
- }
+      <Dialog open={isTransferDialogOpen} onClose={() => setIsTransferDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Transfer Money</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography color="text.secondary">Send money between FinFlow accounts.</Typography>
+            {transferError && <Alert severity="error">{transferError}</Alert>}
+            <FormControl fullWidth>
+              <InputLabel id="source-account">From Account</InputLabel>
+              <Select
+                labelId="source-account"
+                label="From Account"
+                value={selectedSourceAccountId}
+                onChange={(e) => setSelectedSourceAccountId(e.target.value)}
+              >
+                {accounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.accountType} {maskAccountNumber(account.accountNumber)} — Available: {formatMoney(Number(account.balance), account.currency)} {account.currency}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Stack direction="row" spacing={1}>
+              <Button variant={showOwnAccountDestinations ? 'contained' : 'outlined'} onClick={() => setShowOwnAccountDestinations(true)} sx={{ flex: 1 }}>Transfer between my accounts</Button>
+              <Button variant={!showOwnAccountDestinations ? 'contained' : 'outlined'} onClick={() => setShowOwnAccountDestinations(false)} sx={{ flex: 1 }}>Another FinFlow account</Button>
+            </Stack>
+            {showOwnAccountDestinations ? (
+              <FormControl fullWidth>
+                <InputLabel id="dest-account">Destination Account</InputLabel>
+                <Select
+                  labelId="dest-account"
+                  label="Destination Account"
+                  value={destinationAccountId}
+                  onChange={(e) => setDestinationAccountId(e.target.value)}
+                >
+                  {accounts.filter((account) => account.id !== selectedSourceAccountId).map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.accountType} {shortId(account.id)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <TextField
+                label="Destination Account ID"
+                value={destinationAccountId}
+                onChange={(e) => setDestinationAccountId(e.target.value)}
+                helperText="Paste the recipient's FinFlow Account ID. They can copy it from their dashboard."
+              />
+            )}
+            <TextField
+              label="Amount"
+              type="number"
+              value={transferAmount}
+              onChange={(e) => setTransferAmount(e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">{selectedSourceAccount?.currency ?? 'USD'}</InputAdornment>
+              }}
+              helperText={selectedSourceAccount ? `Available balance: ${formatMoney(Number(selectedSourceAccount.balance), selectedSourceAccount.currency)} ${selectedSourceAccount.currency}` : undefined}
+            />
+            {selectedSourceAccount && destinationAccountId && transferAmount && Number(transferAmount) > 0 && (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Transfer Summary</Typography>
+                  <Typography variant="body2"><strong>From:</strong> {selectedSourceAccount.accountType} {maskAccountNumber(selectedSourceAccount.accountNumber)}</Typography>
+                  <Typography variant="body2"><strong>To:</strong> {shortId(destinationAccountId)}</Typography>
+                  <Typography variant="body2"><strong>Amount:</strong> {formatMoney(Number(transferAmount), selectedSourceAccount.currency)} {selectedSourceAccount.currency}</Typography>
+                </CardContent>
+              </Card>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsTransferDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={onSubmitTransfer} disabled={transferMutation.isPending || !selectedSourceAccount}>
+            {transferMutation.isPending ? <CircularProgress size={20} /> : 'Submit Transfer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
- function getStatusColor(status: string): 'default' | 'success' | 'error' | 'warning' {
-   if (status === 'COMPLETED') return 'success'
-   if (status === 'FAILED') return 'error'
-   if (status === 'PENDING') return 'warning'
-   return 'default'
- }
-
- return (
-   <Box sx={{ maxWidth: 980, margin: '24px auto', padding: 2 }}>
-     <Typography variant="h4" sx={{ mb: 1 }}>FinFlow</Typography>
-     <Typography variant="h6" sx={{ mb: 2 }}>Welcome, {user.firstName}</Typography>
-     <Typography sx={{ mb: 1 }}>Email: {user.email}</Typography>
-     <Typography sx={{ mb: 1 }}>Role: {user.role}</Typography>
-     <Typography sx={{ mb: 3 }}>Status: {user.status}</Typography>
-
-     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
-       <Button variant="contained" onClick={onOpenCreateDialog}>
-         Create Account
-       </Button>
-       <Button variant="contained" color="secondary" onClick={onOpenTransferDialog} disabled={accounts.length === 0}>
-         Transfer Money
-       </Button>
-       <Button variant="outlined" onClick={onLogout}>Logout</Button>
-     </Stack>
-
-     {transferSuccess && (
-       <Alert severity="success" sx={{ mb: 2 }}>
-         {transferSuccess}
-       </Alert>
-     )}
-
-     <Typography variant="h6" sx={{ mb: 2, mt: 2 }}>My Accounts</Typography>
-
-     {accountsQuery.isPending && (
-       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-         <CircularProgress size={20} sx={{ mr: 1.5 }} />
-         <Typography>Loading accounts...</Typography>
-       </Box>
-     )}
-
-     {accountsQuery.isError && (
-       <Alert severity="error" sx={{ mb: 2 }}>
-         Unable to load your accounts right now.
-       </Alert>
-     )}
-
-     {!accountsQuery.isPending && !accountsQuery.isError && accounts.length === 0 && (
-       <Typography sx={{ mb: 2 }}>You don't have any accounts yet.</Typography>
-     )}
-
-     {!accountsQuery.isPending && !accountsQuery.isError && accounts.map((account) => (
-       <Card key={account.id} sx={{ mb: 2 }}>
-         <CardContent>
-           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{account.accountType}</Typography>
-           <Typography sx={{ mb: 0.5 }}>{maskAccountNumber(account.accountNumber)}</Typography>
-           <Typography sx={{ mb: 0.5 }}>{formatAmount(account.balance, account.currency)} {account.currency}</Typography>
-           <Typography color="text.secondary">{account.status}</Typography>
-         </CardContent>
-       </Card>
-     ))}
-
-     <Typography variant="h6" sx={{ mb: 2, mt: 4 }}>Recent Transactions</Typography>
-
-     {transactionsQuery.isPending && (
-       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-         <CircularProgress size={20} sx={{ mr: 1.5 }} />
-         <Typography>Loading transactions...</Typography>
-       </Box>
-     )}
-
-     {transactionsQuery.isError && (
-       <Alert severity="error" sx={{ mb: 2 }}>
-         Unable to load your transactions right now.
-       </Alert>
-     )}
-
-     {!transactionsQuery.isPending && !transactionsQuery.isError && transactions.length === 0 && (
-       <Typography sx={{ mb: 2 }}>No transactions yet.</Typography>
-     )}
-
-     {!transactionsQuery.isPending && !transactionsQuery.isError && transactions.map((transaction) => (
-       <Card key={transaction.id} sx={{ mb: 2 }}>
-         <CardContent>
-           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 1 }}>
-             <Chip label={transaction.status} color={getStatusColor(transaction.status)} />
-             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-               {formatAmount(Number(transaction.amount), transaction.currency)}
-             </Typography>
-           </Box>
-           <Typography sx={{ mb: 0.5 }}>Currency: {transaction.currency}</Typography>
-           <Typography sx={{ mb: 0.5 }}>Source: {shortAccountRef(transaction.sourceAccountId)}</Typography>
-           <Typography sx={{ mb: 0.5 }}>Destination: {shortAccountRef(transaction.destinationAccountId)}</Typography>
-           <Typography sx={{ mb: 0.5 }}>Created: {formatTimestamp(transaction.createdAt)}</Typography>
-           <Typography>Completed: {formatTimestamp(transaction.completedAt)}</Typography>
-         </CardContent>
-       </Card>
-     ))}
-
-     <Dialog open={isCreateDialogOpen} onClose={onCloseCreateDialog} fullWidth maxWidth="sm">
-       <DialogTitle>Create Account</DialogTitle>
-       <DialogContent>
-         {createError && (
-           <Alert severity="error" sx={{ mt: 1, mb: 2 }}>
-             {createError}
-           </Alert>
-         )}
-         <FormControl fullWidth sx={{ mt: 1, mb: 2 }}>
-           <InputLabel id="account-type-label">Account Type</InputLabel>
-           <Select
-             labelId="account-type-label"
-             label="Account Type"
-             value={accountType}
-             onChange={(event) => setAccountType(event.target.value as AccountType)}
-             disabled={createAccountMutation.isPending}
-           >
-             <MenuItem value="CHECKING">CHECKING</MenuItem>
-             <MenuItem value="SAVINGS">SAVINGS</MenuItem>
-           </Select>
-         </FormControl>
-         <TextField
-           fullWidth
-           label="Currency"
-           value={currency}
-           onChange={(event) => setCurrency(event.target.value)}
-           disabled={createAccountMutation.isPending}
-           helperText="Use 3-letter currency code (default: USD)"
-         />
-       </DialogContent>
-       <DialogActions>
-         <Button onClick={onCloseCreateDialog} disabled={createAccountMutation.isPending}>
-           Cancel
-         </Button>
-         <Button onClick={onCreateAccount} variant="contained" disabled={createAccountMutation.isPending}>
-           {createAccountMutation.isPending ? 'Creating...' : 'Create'}
-         </Button>
-       </DialogActions>
-     </Dialog>
-
-     <Dialog open={isTransferDialogOpen} onClose={onCloseTransferDialog} fullWidth maxWidth="sm">
-       <DialogTitle>Transfer Money</DialogTitle>
-       <DialogContent>
-         {transferError && (
-           <Alert severity="error" sx={{ mt: 1, mb: 2 }}>
-             {transferError}
-           </Alert>
-         )}
-
-         <FormControl fullWidth sx={{ mt: 1, mb: 2 }}>
-           <InputLabel id="source-account-label">Source Account</InputLabel>
-           <Select
-             labelId="source-account-label"
-             label="Source Account"
-             value={selectedSourceAccountId}
-             onChange={(event) => setSelectedSourceAccountId(event.target.value as string)}
-             disabled={transferMutation.isPending || accounts.length === 0}
-           >
-             {accounts.map((account) => (
-               <MenuItem key={account.id} value={account.id}>
-                 {account.accountType} • {maskAccountNumber(account.accountNumber)} • {formatAmount(account.balance, account.currency)} {account.currency}
-               </MenuItem>
-             ))}
-           </Select>
-         </FormControl>
-
-         <TextField
-           fullWidth
-           label="Destination Account ID"
-           value={destinationAccountId}
-           onChange={(event) => setDestinationAccountId(event.target.value)}
-           disabled={transferMutation.isPending}
-           sx={{ mb: 2 }}
-         />
-
-         <TextField
-           fullWidth
-           label="Amount"
-           type="number"
-           value={transferAmount}
-           onChange={(event) => setTransferAmount(event.target.value)}
-           disabled={transferMutation.isPending || !selectedSourceAccount}
-           inputProps={{ min: '0.01', step: '0.01' }}
-           helperText={selectedSourceAccount ? `Currency: ${selectedSourceAccount.currency}` : 'Select a source account'}
-         />
-       </DialogContent>
-       <DialogActions>
-         <Button onClick={onCloseTransferDialog} disabled={transferMutation.isPending}>
-           Cancel
-         </Button>
-         <Button onClick={onSubmitTransfer} variant="contained" disabled={transferMutation.isPending}>
-           {transferMutation.isPending ? 'Submitting...' : 'Submit Transfer'}
-         </Button>
-       </DialogActions>
-     </Dialog>
-   </Box>
- )
+      <Snackbar open={Boolean(copySuccess)} autoHideDuration={2500} onClose={() => setCopySuccess(null)} message={copySuccess} />
+      <Snackbar open={Boolean(transferSuccess)} autoHideDuration={3000} onClose={() => setTransferSuccess(null)} message={transferSuccess} />
+    </Container>
+  )
 }

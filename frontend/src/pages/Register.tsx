@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { TextField, Button, Box, Alert, CircularProgress } from '@mui/material'
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, TextField, Typography } from '@mui/material'
 import { useMutation } from '@tanstack/react-query'
 import { registerUser, RegisterUserRequest } from '../api/auth'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 export default function Register() {
   const [firstName, setFirstName] = useState('')
@@ -10,69 +10,55 @@ export default function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [clientError, setClientError] = useState<string | null>(null)
-
   const navigate = useNavigate()
 
   const mutation = useMutation({
     mutationFn: (payload: RegisterUserRequest) => registerUser(payload),
-    onSuccess: () => {
-      navigate('/login')
-    }
+    onSuccess: () => navigate('/login')
   })
-
-  function validate(): boolean {
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
-      setClientError('All fields are required')
-      return false
-    }
-    if (password.length < 8) {
-      setClientError('Password must be at least 8 characters')
-      return false
-    }
-    setClientError(null)
-    return true
-  }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validate()) return
-
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
+      setClientError('All fields are required')
+      return
+    }
+    if (password.length < 8) {
+      setClientError('Password must be at least 8 characters')
+      return
+    }
+    setClientError(null)
     mutation.mutate({ firstName, lastName, email, password })
   }
 
-  const resp = (mutation.error as any)?.response
-  let backendError: string | null = null
-  if (resp) {
-    if (resp.status === 409) {
-      backendError = resp.data?.message || 'Email already exists'
-    } else if (resp.status === 400) {
-      backendError = resp.data?.message || JSON.stringify(resp.data) || 'Validation error'
-    } else {
-      backendError = resp.data?.message || (mutation.error as any)?.message
-    }
-  }
-
   return (
-    <Box sx={{ maxWidth: 480, margin: '24px auto', padding: 2 }}>
-      <h2>Create Account</h2>
-
-      {clientError && <Alert severity="warning" sx={{ mb: 2 }}>{clientError}</Alert>}
-      {mutation.isError && <Alert severity="error" sx={{ mb: 2 }}>{String(backendError)}</Alert>}
-      {mutation.isSuccess && <Alert severity="success" sx={{ mb: 2 }}>Registration successful — redirecting to login...</Alert>}
-
-      <form onSubmit={onSubmit}>
-        <TextField fullWidth label="First name" margin="normal" value={firstName} onChange={e => setFirstName(e.target.value)} />
-        <TextField fullWidth label="Last name" margin="normal" value={lastName} onChange={e => setLastName(e.target.value)} />
-        <TextField fullWidth label="Email" type="email" margin="normal" value={email} onChange={e => setEmail(e.target.value)} />
-        <TextField fullWidth label="Password" type="password" margin="normal" value={password} onChange={e => setPassword(e.target.value)} />
-
-        <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
-          <Button variant="contained" type="submit" disabled={mutation.isPending}>
-            Register
-          </Button>
-          {mutation.isPending && <CircularProgress size={24} sx={{ ml: 2 }} />}
-        </Box>
-      </form>
+    <Box sx={{ minHeight: 'calc(100vh - 112px)', display: 'grid', placeItems: 'center' }}>
+      <Card sx={{ width: '100%', maxWidth: 480 }}>
+        <CardContent sx={{ p: 4 }}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h4">Create your account</Typography>
+              <Typography color="text.secondary">Join FinFlow and start managing your accounts.</Typography>
+            </Box>
+            {clientError && <Alert severity="warning">{clientError}</Alert>}
+            {mutation.isError && <Alert severity="error">{(mutation.error as any)?.response?.data?.message || 'Unable to register.'}</Alert>}
+            <form onSubmit={onSubmit}>
+              <Stack spacing={2}>
+                <TextField fullWidth label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                <TextField fullWidth label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                <TextField fullWidth label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <TextField fullWidth label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <Button type="submit" variant="contained" size="large" disabled={mutation.isPending}>
+                  {mutation.isPending ? <CircularProgress size={20} /> : 'Register'}
+                </Button>
+              </Stack>
+            </form>
+            <Typography variant="body2" color="text.secondary">
+              Already have an account? <Button component={Link} to="/login" size="small">Login</Button>
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     </Box>
   )
 }

@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { TextField, Button, Box, Alert, CircularProgress } from '@mui/material'
+import { Box, Button, Card, CardContent, CircularProgress, Stack, TextField, Typography, Alert } from '@mui/material'
 import { useMutation } from '@tanstack/react-query'
 import { login, LoginRequest } from '../api/auth'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -18,65 +18,44 @@ export default function Login() {
     }
   })
 
-  function validate(): boolean {
-    if (!email.trim() || !password.trim()) {
-      setWarning('Email and password are required')
-      return false
-    }
-    setWarning(null)
-    return true
-  }
-
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validate()) return
+    if (!email.trim() || !password.trim()) {
+      setWarning('Email and password are required')
+      return
+    }
+    setWarning(null)
     mutation.mutate({ email, password })
   }
 
-  const axiosError = mutation.error as any
-  const response = axiosError?.response
-  let serverMessage: string | null = null
-  if (response) {
-    if (response.status === 401) {
-      serverMessage = response.data?.message || 'Invalid email or password'
-    } else if (response.status === 400) {
-      serverMessage = response.data?.message || JSON.stringify(response.data) || 'Validation error'
-    } else {
-      serverMessage = response.data?.message || axiosError?.message || 'Login failed'
-    }
-  } else if (mutation.isError) {
-    serverMessage = 'Unable to reach the server. Please try again.'
-  }
+  const serverMessage = (mutation.error as any)?.response?.data?.message || 'Unable to sign in.'
 
   return (
-    <Box sx={{ maxWidth: 480, margin: '24px auto', padding: 2 }}>
-      <h2>Login</h2>
-      {warning && <Alert severity="warning" sx={{ mb: 2 }}>{warning}</Alert>}
-      {mutation.isError && <Alert severity="error" sx={{ mb: 2 }}>{String(serverMessage)}</Alert>}
-      <form onSubmit={onSubmit}>
-        <TextField
-          fullWidth
-          label="Email"
-          type="email"
-          margin="normal"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <TextField
-          fullWidth
-          label="Password"
-          type="password"
-          margin="normal"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
-          <Button variant="contained" type="submit" disabled={mutation.isPending}>
-            Login
-          </Button>
-          {mutation.isPending && <CircularProgress size={24} sx={{ ml: 2 }} />}
-        </Box>
-      </form>
+    <Box sx={{ minHeight: 'calc(100vh - 112px)', display: 'grid', placeItems: 'center' }}>
+      <Card sx={{ width: '100%', maxWidth: 460 }}>
+        <CardContent sx={{ p: 4 }}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h4">FinFlow</Typography>
+              <Typography color="text.secondary">Welcome back. Sign in to your banking dashboard.</Typography>
+            </Box>
+            {warning && <Alert severity="warning">{warning}</Alert>}
+            {mutation.isError && <Alert severity="error">{serverMessage}</Alert>}
+            <form onSubmit={onSubmit}>
+              <Stack spacing={2}>
+                <TextField fullWidth label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <TextField fullWidth label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <Button type="submit" variant="contained" size="large" disabled={mutation.isPending}>
+                  {mutation.isPending ? <CircularProgress size={20} /> : 'Login'}
+                </Button>
+              </Stack>
+            </form>
+            <Typography variant="body2" color="text.secondary">
+              New to FinFlow? <Button component={Link} to="/register" size="small">Create an account</Button>
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     </Box>
   )
 }
