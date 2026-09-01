@@ -37,8 +37,28 @@ services:
       retries: 5
     restart: unless-stopped
 
+  transaction-postgres:
+    image: postgres:17
+    container_name: finflow-transaction-postgres
+    environment:
+      POSTGRES_DB: ${TRANSACTION_POSTGRES_DB:-finflow_transactions}
+      POSTGRES_USER: ${TRANSACTION_POSTGRES_USER:-finflow_transaction}
+      POSTGRES_PASSWORD: ${TRANSACTION_POSTGRES_PASSWORD:-finflow_transaction_dev_password}
+    ports:
+      - "5438:5432" # host:container
+    volumes:
+      - finflow_transaction_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TRANSACTION_POSTGRES_USER:-finflow_transaction} -d ${TRANSACTION_POSTGRES_DB:-finflow_transactions}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   finflow_postgres_data:
     name: finflow_postgres_data
   finflow_account_postgres_data:
     name: finflow_account_postgres_data
+  finflow_transaction_postgres_data:
+    name: finflow_transaction_postgres_data

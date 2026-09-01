@@ -19,6 +19,10 @@ spring:
               uri: http://localhost:8082
               predicates:
                 - Path=/api/accounts/**
+            - id: transaction-route
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/transactions/**
 
 management:
   endpoints:
@@ -28,3 +32,4 @@ management:
   endpoint:
     health:
       show-details: always
+
