@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: finflow-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-finflow_identity}
+      POSTGRES_USER: ${POSTGRES_USER:-finflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finflow_dev_password}
+    ports:
+      - "5436:5432" # host:container
+    volumes:
+      - finflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finflow} -d ${POSTGRES_DB:-finflow_identity}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  account-postgres:
+    image: postgres:17
+    container_name: finflow-account-postgres
+    environment:
+      POSTGRES_DB: ${ACCOUNT_POSTGRES_DB:-finflow_accounts}
+      POSTGRES_USER: ${ACCOUNT_POSTGRES_USER:-finflow_account}
+      POSTGRES_PASSWORD: ${ACCOUNT_POSTGRES_PASSWORD:-finflow_account_dev_password}
+    ports:
+      - "5437:5432" # host:container
+    volumes:
+      - finflow_account_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ACCOUNT_POSTGRES_USER:-finflow_account} -d ${ACCOUNT_POSTGRES_DB:-finflow_accounts}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  finflow_postgres_data:
+    name: finflow_postgres_data
+  finflow_account_postgres_data:
+    name: finflow_account_postgres_data

@@ -1,0 +1,37 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5436}/${DB_NAME:finflow_identity}}
+    username: ${DB_USER:finflow}
+    password: ${DB_PASSWORD:finflow_dev_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+  security:
+    user:
+      name: user
+      password: password
+
+# Keep actuator exposed endpoints for health checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+jwt:
+  secret: ${JWT_SECRET:change_this_dev_secret_with_at_least_32_chars_123456}
+  expiration-seconds: ${JWT_EXP:3600}
+
