@@ -3,6 +3,8 @@ package com.finflow.account.service;
 import com.finflow.account.domain.Account;
 import com.finflow.account.domain.AccountStatus;
 import com.finflow.account.dto.AccountResponse;
+import com.finflow.account.dto.DepositFundsRequest;
+import com.finflow.account.dto.DepositFundsResponse;
 import com.finflow.account.dto.CreateAccountRequest;
 import com.finflow.account.dto.TransferFundsRequest;
 import com.finflow.account.dto.TransferFundsResponse;
@@ -54,6 +56,38 @@ public class AccountService {
                 .stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public DepositFundsResponse depositFunds(UUID authenticatedUserId, DepositFundsRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request is required");
+        }
+        if (request.accountId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "accountId is required");
+        }
+        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount must be greater than zero");
+        }
+
+        String normalizedCurrency = normalizeCurrency(request.currency());
+
+        Account account = accountRepository.findByIdForDepositUpdate(request.accountId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
+
+        if (!account.getUserId().equals(authenticatedUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this account");
+        }
+        if (account.getStatus() != AccountStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Account must be active");
+        }
+        if (!account.getCurrency().equals(normalizedCurrency)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Account currency does not match requested currency");
+        }
+
+        account.setBalance(account.getBalance().add(request.amount()));
+
+        return new DepositFundsResponse(account.getId(), request.amount(), normalizedCurrency);
     }
 
     @Transactional

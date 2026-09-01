@@ -1,11 +1,14 @@
 package com.finflow.transaction.service;
 
 import com.finflow.transaction.client.AccountServiceClient;
+import com.finflow.transaction.client.DepositFundsRequest;
 import com.finflow.transaction.client.TransferFundsRequest;
 import com.finflow.transaction.client.TransferFundsResponse;
 import com.finflow.transaction.domain.Transaction;
 import com.finflow.transaction.domain.TransactionStatus;
+import com.finflow.transaction.domain.TransactionType;
 import com.finflow.transaction.dto.TransactionResponse;
+import com.finflow.transaction.dto.DepositRequest;
 import com.finflow.transaction.dto.TransferRequest;
 import com.finflow.transaction.repository.TransactionRepository;
 import org.springframework.http.HttpStatus;
@@ -44,6 +47,7 @@ public class TransactionService {
 
         Transaction transaction = new Transaction();
         transaction.setInitiatedByUserId(authenticatedUserId);
+        transaction.setType(TransactionType.TRANSFER);
         transaction.setSourceAccountId(request.sourceAccountId());
         transaction.setDestinationAccountId(request.destinationAccountId());
         transaction.setAmount(request.amount());
@@ -62,7 +66,7 @@ public class TransactionService {
             // V1 synchronous flow: Transaction Service writes the ledger first, then asks the
             // Account Service to atomically debit/credit in its own database. A future production
             // design could move this to a Saga or event-driven coordination model.
-            TransferFundsResponse accountResponse = accountServiceClient.transfer(authorizationHeader, accountRequest);
+            accountServiceClient.transfer(authorizationHeader, accountRequest);
 
             transaction.setStatus(TransactionStatus.COMPLETED);
             transaction.setCompletedAt(Instant.now());
@@ -77,6 +81,45 @@ public class TransactionService {
             transaction.setStatus(TransactionStatus.FAILED);
             transactionRepository.save(transaction);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Account service transfer failed", ex);
+        }
+    }
+
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public TransactionResponse deposit(UUID authenticatedUserId, DepositRequest request, String authorizationHeader) {
+        String normalizedCurrency = normalizeCurrency(request.currency());
+        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount must be greater than zero");
+        }
+
+        Transaction transaction = new Transaction();
+        transaction.setInitiatedByUserId(authenticatedUserId);
+        transaction.setType(TransactionType.DEPOSIT);
+        transaction.setSourceAccountId(null);
+        transaction.setDestinationAccountId(request.accountId());
+        transaction.setAmount(request.amount());
+        transaction.setCurrency(normalizedCurrency);
+        transaction.setStatus(TransactionStatus.PENDING);
+        transaction = transactionRepository.save(transaction);
+
+        try {
+            accountServiceClient.deposit(authorizationHeader, new DepositFundsRequest(
+                    request.accountId(),
+                    request.amount(),
+                    normalizedCurrency
+            ));
+
+            transaction.setStatus(TransactionStatus.COMPLETED);
+            transaction.setCompletedAt(Instant.now());
+            transaction = transactionRepository.save(transaction);
+            return toResponse(transaction);
+        } catch (ResponseStatusException ex) {
+            transaction.setStatus(TransactionStatus.FAILED);
+            transactionRepository.save(transaction);
+            throw ex;
+        } catch (Exception ex) {
+            transaction.setStatus(TransactionStatus.FAILED);
+            transactionRepository.save(transaction);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Account service deposit failed", ex);
         }
     }
 
@@ -116,6 +159,7 @@ public class TransactionService {
         return new TransactionResponse(
                 transaction.getId(),
                 transaction.getInitiatedByUserId(),
+                transaction.getType(),
                 transaction.getSourceAccountId(),
                 transaction.getDestinationAccountId(),
                 transaction.getAmount(),

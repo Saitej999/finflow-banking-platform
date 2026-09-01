@@ -1,6 +1,7 @@
 import api from './api'
 
 export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED'
+export type TransactionType = 'TRANSFER' | 'DEPOSIT'
 
 export interface TransferRequest {
   sourceAccountId: string
@@ -12,6 +13,7 @@ export interface TransferRequest {
 export interface TransactionResponse {
   id: string
   initiatedByUserId: string
+  type: TransactionType
   sourceAccountId: string
   destinationAccountId: string
   amount: number
@@ -24,6 +26,17 @@ export interface TransactionResponse {
 
 export async function createTransfer(request: TransferRequest): Promise<TransactionResponse> {
   const resp = await api.post('/api/transactions/transfers', request)
+  return resp.data as TransactionResponse
+}
+
+export interface DepositRequest {
+  accountId: string
+  amount: number
+  currency: string
+}
+
+export async function createDeposit(request: DepositRequest): Promise<TransactionResponse> {
+  const resp = await api.post('/api/transactions/deposits', request)
   return resp.data as TransactionResponse
 }
 

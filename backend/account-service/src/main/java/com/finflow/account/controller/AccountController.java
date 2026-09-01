@@ -2,6 +2,8 @@ package com.finflow.account.controller;
 
 import com.finflow.account.dto.AccountResponse;
 import com.finflow.account.dto.CreateAccountRequest;
+import com.finflow.account.dto.DepositFundsRequest;
+import com.finflow.account.dto.DepositFundsResponse;
 import com.finflow.account.dto.TransferFundsRequest;
 import com.finflow.account.dto.TransferFundsResponse;
 import com.finflow.account.service.AccountService;
@@ -50,6 +52,15 @@ public class AccountController {
             Authentication authentication) {
         UUID authenticatedUserId = UUID.fromString(authentication.getName());
         TransferFundsResponse response = accountService.transferFunds(authenticatedUserId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/deposit")
+    public ResponseEntity<DepositFundsResponse> depositFunds(
+            @Valid @RequestBody DepositFundsRequest request,
+            Authentication authentication) {
+        UUID authenticatedUserId = UUID.fromString(authentication.getName());
+        DepositFundsResponse response = accountService.depositFunds(authenticatedUserId, request);
         return ResponseEntity.ok(response);
     }
 }

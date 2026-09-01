@@ -1,9 +1,12 @@
 import React from 'react'
-import { AppBar, Toolbar, Typography, Button, Box, Avatar, IconButton, Menu, MenuItem, Container } from '@mui/material'
+import { AppBar, Toolbar, Typography, Button, Box, Avatar, Menu, MenuItem, Container } from '@mui/material'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import AccountPage from './pages/AccountPage'
+import { getCurrentUser } from './api/auth'
+import { useQuery } from '@tanstack/react-query'
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -15,9 +18,9 @@ function AppShell() {
   const location = useLocation()
   const token = localStorage.getItem('finflow_access_token')
   const isAuthenticated = Boolean(token)
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null)
-  const isMenuOpen = Boolean(anchorEl)
-  const firstName = 'Dashboard'
+  const userQuery = useQuery({ queryKey: ['current-user'], queryFn: getCurrentUser, enabled: isAuthenticated, retry: false })
+  const currentUser = userQuery.data
+  const fullName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}`.trim() : 'Account'
 
   function handleLogout() {
     localStorage.removeItem('finflow_access_token')
@@ -38,14 +41,14 @@ function AppShell() {
               <Button component={Link} to="/dashboard" color="inherit" sx={{ fontWeight: 600 }}>
                 Dashboard
               </Button>
-              <Button onClick={(event) => setAnchorEl(event.currentTarget)} color="inherit" startIcon={<Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main', fontSize: 14 }}>{getInitials(firstName)}</Avatar>} sx={{ textTransform: 'none', fontWeight: 600 }}>
-                {firstName}
+              <Button component={Link} to="/account" color="inherit" sx={{ fontWeight: 600 }}>
+                Account
               </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main', fontSize: 14 }}>{getInitials(currentUser ? currentUser.firstName : 'A')}</Avatar>
+                <Typography sx={{ fontWeight: 700 }}>{fullName}</Typography>
+              </Box>
               <Button variant="contained" onClick={handleLogout}>Logout</Button>
-              <Menu anchorEl={anchorEl} open={isMenuOpen} onClose={() => setAnchorEl(null)}>
-                <MenuItem onClick={() => { setAnchorEl(null); navigate('/dashboard') }}>Dashboard</MenuItem>
-                <MenuItem onClick={handleLogout}>Logout</MenuItem>
-              </Menu>
             </>
           ) : (
             <>
@@ -65,6 +68,7 @@ function AppShell() {
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />} />
+          <Route path="/account" element={isAuthenticated ? <AccountPage /> : <Navigate to="/login" replace />} />
           <Route path="/" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />} />
         </Routes>
       </Container>

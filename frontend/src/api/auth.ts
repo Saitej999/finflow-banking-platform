@@ -18,6 +18,11 @@ export interface UserResponse {
   updatedAt: string
 }
 
+export interface UpdateProfileRequest {
+  firstName: string
+  lastName: string
+}
+
 export interface LoginRequest {
   email: string
   password: string
@@ -42,5 +47,10 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
 
 export async function getCurrentUser(): Promise<UserResponse> {
   const resp = await api.get('/api/identity/me')
+  return resp.data as UserResponse
+}
+
+export async function updateCurrentUser(payload: UpdateProfileRequest): Promise<UserResponse> {
+  const resp = await api.post('/api/identity/me', payload)
   return resp.data as UserResponse
 }

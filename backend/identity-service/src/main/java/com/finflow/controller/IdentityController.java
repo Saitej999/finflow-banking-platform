@@ -3,6 +3,7 @@ package com.finflow.controller;
 import com.finflow.dto.LoginRequest;
 import com.finflow.dto.LoginResponse;
 import com.finflow.dto.RegisterUserRequest;
+import com.finflow.dto.UpdateProfileRequest;
 import com.finflow.dto.UserResponse;
 import com.finflow.exception.DuplicateEmailException;
 import com.finflow.exception.InvalidCredentialsException;
@@ -49,6 +50,15 @@ public class IdentityController {
         String userId = authentication.getName();
         java.util.UUID id = java.util.UUID.fromString(userId);
         UserResponse resp = userService.getById(id);
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/me")
+    public ResponseEntity<UserResponse> updateMe(
+            org.springframework.security.core.Authentication authentication,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        java.util.UUID id = java.util.UUID.fromString(authentication.getName());
+        UserResponse resp = userService.updateProfile(id, request);
         return ResponseEntity.ok(resp);
     }
 

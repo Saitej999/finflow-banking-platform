@@ -1,6 +1,7 @@
 package com.finflow.transaction.controller;
 
 import com.finflow.transaction.dto.TransactionResponse;
+import com.finflow.transaction.dto.DepositRequest;
 import com.finflow.transaction.dto.TransferRequest;
 import com.finflow.transaction.service.TransactionService;
 import jakarta.validation.Valid;
@@ -36,6 +37,17 @@ public class TransactionController {
 
         UUID authenticatedUserId = UUID.fromString(authentication.getName());
         TransactionResponse response = transactionService.transfer(authenticatedUserId, request, authorizationHeader);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/deposits")
+    public ResponseEntity<TransactionResponse> deposit(
+            @Valid @RequestBody DepositRequest request,
+            Authentication authentication,
+            @RequestHeader("Authorization") String authorizationHeader) {
+
+        UUID authenticatedUserId = UUID.fromString(authentication.getName());
+        TransactionResponse response = transactionService.deposit(authenticatedUserId, request, authorizationHeader);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

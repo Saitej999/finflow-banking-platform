@@ -38,7 +38,11 @@ public class Transaction {
     @Column(name = "initiated_by_user_id", nullable = false, updatable = false, columnDefinition = "uuid")
     private UUID initiatedByUserId;
 
-    @Column(name = "source_account_id", nullable = false, updatable = false, columnDefinition = "uuid")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false, length = 32)
+    private TransactionType type;
+
+    @Column(name = "source_account_id", columnDefinition = "uuid")
     private UUID sourceAccountId;
 
     @Column(name = "destination_account_id", nullable = false, updatable = false, columnDefinition = "uuid")
@@ -96,6 +100,14 @@ public class Transaction {
 
     public void setSourceAccountId(UUID sourceAccountId) {
         this.sourceAccountId = sourceAccountId;
+    }
+
+    public TransactionType getType() {
+        return type;
+    }
+
+    public void setType(TransactionType type) {
+        this.type = type;
     }
 
     public UUID getDestinationAccountId() {

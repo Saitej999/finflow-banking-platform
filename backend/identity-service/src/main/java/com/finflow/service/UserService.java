@@ -4,6 +4,7 @@ import com.finflow.domain.Role;
 import com.finflow.domain.Status;
 import com.finflow.domain.User;
 import com.finflow.dto.RegisterUserRequest;
+import com.finflow.dto.UpdateProfileRequest;
 import com.finflow.dto.UserResponse;
 import com.finflow.exception.DuplicateEmailException;
 import com.finflow.exception.InvalidCredentialsException;
@@ -126,6 +127,23 @@ public class UserService {
                 user.getUpdatedAt()
         );
     }
-}
 
+    @Transactional
+    public UserResponse updateProfile(java.util.UUID id, UpdateProfileRequest request) {
+        User user = userRepository.findById(id).orElseThrow(() -> new com.finflow.exception.UserNotFoundException("User not found"));
+        user.setFirstName(request.firstName().trim());
+        user.setLastName(request.lastName().trim());
+        User saved = userRepository.save(user);
+        return new UserResponse(
+                saved.getId(),
+                saved.getFirstName(),
+                saved.getLastName(),
+                saved.getEmail(),
+                saved.getRole(),
+                saved.getStatus(),
+                saved.getCreatedAt(),
+                saved.getUpdatedAt()
+        );
+    }
+}
 
