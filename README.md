@@ -1,7 +1,7 @@
 # FinFlow Banking Platform
 
 FinFlow is a full-stack banking platform that demonstrates a modern microservice architecture with Java 21 and Spring Boot on the backend, and React + TypeScript on the frontend.  
-The current implementation focuses on identity, authentication, account ownership security, and foundational account workflows.
+The platform now includes identity, account ownership enforcement, persistent transaction history, and a synchronous V1 transfer workflow between the Transaction and Account services.
 
 ## Architecture
 
@@ -12,18 +12,27 @@ React :5173
 API Gateway :8080
       /       \
      /         \
-Identity       Account
-Service        Service
-:8081          :8082
-   |              |
-   v              v
-PostgreSQL     PostgreSQL
-:5436          :5437
+Identity     Transaction
+Service      Service
+:8081        :8083
+   |           |
+   v           v
+PostgreSQL   PostgreSQL
+:5436        :5438
 finflow_identity
-               finflow_accounts
+           finflow_transactions
+
+Account
+Service
+:8082
+   |
+   v
+PostgreSQL
+:5437
+finflow_accounts
 ```
 
-Each microservice owns its own database. Identity data and account data are intentionally isolated to keep service boundaries clear.
+Each microservice owns its own database. Identity, account, and transaction data are intentionally isolated to keep service boundaries clear. The Account Service owns balances and debit/credit logic; the Transaction Service owns ledger records and transfer history.
 
 ## Tech Stack
 
@@ -90,6 +99,22 @@ Each microservice owns its own database. Identity data and account data are inte
 - Create Account dialog
 - React Query cache invalidation and refetch
 
+### Transaction Service
+- `POST /api/transactions/transfers`
+- `GET /api/transactions/me`
+- `GET /api/transactions/{transactionId}`
+- JWT-authenticated transfer orchestration
+- PENDING -> COMPLETED/FAILED ledgers
+- Ownership-protected transaction history
+
+### Frontend Transaction Workflow
+- Transfer Money dialog from the authenticated dashboard
+- Source-account selection from the user's existing accounts
+- Destination account UUID entry
+- Amount validation and currency normalization
+- Account balance refresh via React Query invalidation
+- Transaction history cards with status, timestamps, and masked account references
+
 ## Security Design
 
 - Stateless JWT authentication
@@ -111,6 +136,12 @@ Each microservice owns its own database. Identity data and account data are inte
 ### Account
 - `POST /api/accounts`
 - `GET /api/accounts/me`
+- `POST /api/accounts/transfer`
+
+### Transaction
+- `POST /api/transactions/transfers`
+- `GET /api/transactions/me`
+- `GET /api/transactions/{transactionId}`
 
 Protected endpoints require:
 
@@ -148,15 +179,16 @@ Use `.env.example` as the template for local environment configuration.
 1. Start PostgreSQL containers
 2. Start Identity Service
 3. Start Account Service
-4. Start API Gateway
-5. Start React frontend
+4. Start Transaction Service
+5. Start API Gateway
+6. Start React frontend
 
 ### Commands
 
 Start databases:
 
 ```bash
-docker compose up -d postgres account-postgres
+docker compose up -d postgres account-postgres transaction-postgres
 ```
 
 Start backend services (separate terminals):
@@ -172,6 +204,11 @@ cd backend/account-service
 ```
 
 ```bash
+cd backend/transaction-service
+../mvnw.cmd spring-boot:run
+```
+
+```bash
 cd backend/api-gateway
 ../mvnw.cmd spring-boot:run
 ```
@@ -181,15 +218,9 @@ Start frontend:
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev -- --host 0.0.0.0
 ```
 
-## Roadmap (Planned)
+## V1 Transfer Flow
 
-- Transaction Service
-- Transfers
-- Transaction history
-- Automated backend/frontend tests
-- Observability
-- Kafka/event-driven features
-- Deployment improvements
+The React frontend submits transfer requests through the API Gateway to the Transaction Service, which validates the authenticated user, records a ledger entry, and then calls the Account Service for the atomic local debit/credit operation. The Account Service owns balances, while the Transaction Service owns the ledger and history.
