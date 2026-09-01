@@ -4,9 +4,13 @@ import com.finflow.account.domain.Account;
 import com.finflow.account.domain.AccountStatus;
 import com.finflow.account.dto.AccountResponse;
 import com.finflow.account.dto.CreateAccountRequest;
+import com.finflow.account.dto.TransferFundsRequest;
+import com.finflow.account.dto.TransferFundsResponse;
 import com.finflow.account.repository.AccountRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -50,6 +54,74 @@ public class AccountService {
                 .stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public TransferFundsResponse transferFunds(UUID authenticatedUserId, TransferFundsRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request is required");
+        }
+
+        if (request.sourceAccountId() == null || request.destinationAccountId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sourceAccountId and destinationAccountId are required");
+        }
+
+        if (request.sourceAccountId().equals(request.destinationAccountId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sourceAccountId and destinationAccountId must be different");
+        }
+
+        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount must be greater than zero");
+        }
+
+        String normalizedCurrency = normalizeCurrency(request.currency());
+
+        Account source = accountRepository.findByIdForUpdate(request.sourceAccountId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Source account not found"));
+        Account destination = accountRepository.findByIdForUpdate(request.destinationAccountId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Destination account not found"));
+
+        if (!source.getUserId().equals(authenticatedUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own the source account");
+        }
+
+        if (source.getStatus() != AccountStatus.ACTIVE || destination.getStatus() != AccountStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Source and destination accounts must be active");
+        }
+
+        if (!source.getCurrency().equals(normalizedCurrency)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Source account currency does not match requested currency");
+        }
+
+        if (!destination.getCurrency().equals(normalizedCurrency)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Destination account currency does not match requested currency");
+        }
+
+        if (source.getBalance().compareTo(request.amount()) < 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Insufficient funds");
+        }
+
+        source.setBalance(source.getBalance().subtract(request.amount()));
+        destination.setBalance(destination.getBalance().add(request.amount()));
+
+        return new TransferFundsResponse(
+                source.getId(),
+                destination.getId(),
+                request.amount(),
+                normalizedCurrency
+        );
+    }
+
+    private String normalizeCurrency(String rawCurrency) {
+        if (rawCurrency == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "currency is required");
+        }
+
+        String normalized = rawCurrency.trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() != 3) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "currency must be exactly 3 characters");
+        }
+        return normalized;
     }
 
     private String generateUniqueAccountNumber() {

@@ -2,6 +2,8 @@ package com.finflow.account.controller;
 
 import com.finflow.account.dto.AccountResponse;
 import com.finflow.account.dto.CreateAccountRequest;
+import com.finflow.account.dto.TransferFundsRequest;
+import com.finflow.account.dto.TransferFundsResponse;
 import com.finflow.account.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -40,5 +42,14 @@ public class AccountController {
         UUID userId = UUID.fromString(authentication.getName());
         List<AccountResponse> accounts = accountService.getAccountsForUser(userId);
         return ResponseEntity.ok(accounts);
+    }
+
+    @PostMapping("/transfer")
+    public ResponseEntity<TransferFundsResponse> transferFunds(
+            @Valid @RequestBody TransferFundsRequest request,
+            Authentication authentication) {
+        UUID authenticatedUserId = UUID.fromString(authentication.getName());
+        TransferFundsResponse response = accountService.transferFunds(authenticatedUserId, request);
+        return ResponseEntity.ok(response);
     }
 }
