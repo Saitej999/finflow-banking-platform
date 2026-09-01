@@ -76,6 +76,7 @@ export default function Dashboard() {
       setDepositSuccess('Deposit completed successfully')
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      clearTransactionFilters()
     }
   })
 
@@ -88,6 +89,18 @@ export default function Dashboard() {
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => (statusFilter === 'ALL' || tx.status === statusFilter) && (typeFilter === 'ALL' || tx.type === typeFilter))
   }, [transactions, statusFilter, typeFilter])
+  const hasTransactions = transactions.length > 0
+  const hasFilteredTransactions = filteredTransactions.length > 0
+  const statusCounts = useMemo(() => transactions.reduce((counts, tx) => {
+    counts.ALL += 1
+    counts[tx.status] += 1
+    return counts
+  }, { ALL: 0, COMPLETED: 0, FAILED: 0, PENDING: 0 }), [transactions])
+  const typeCounts = useMemo(() => transactions.reduce((counts, tx) => {
+    counts.ALL += 1
+    counts[tx.type] += 1
+    return counts
+  }, { ALL: 0, TRANSFER: 0, DEPOSIT: 0 }), [transactions])
 
   React.useEffect(() => {
     const userStatus = (query.error as any)?.response?.status
@@ -173,6 +186,11 @@ export default function Dashboard() {
   const ownDestinationOptions = accounts.filter((a) => a.id !== selectedSourceAccountId)
   const filteredDepositAccount = selectedDepositAccount
   const newDepositBalance = filteredDepositAccount ? Number(filteredDepositAccount.balance) + (Number.isFinite(Number(depositAmount)) ? Number(depositAmount) : 0) : 0
+
+  function clearTransactionFilters() {
+    setStatusFilter('ALL')
+    setTypeFilter('ALL')
+  }
 
   if (query.isPending) return <Container maxWidth="lg" sx={{ py: 4 }}><Skeleton variant="rectangular" height={320} /></Container>
   if (query.isError || !user) return <Container maxWidth="lg" sx={{ py: 4 }}><Alert severity="error">Unable to load dashboard. Please login again.</Alert></Container>
@@ -274,18 +292,43 @@ export default function Dashboard() {
       {transactionsQuery.isPending ? <Skeleton variant="rectangular" height={260} /> : (
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
-              {(['ALL', 'COMPLETED', 'FAILED', 'PENDING'] as StatusFilter[]).map((filter) => (
-                <Button key={filter} variant={statusFilter === filter ? 'contained' : 'outlined'} onClick={() => setStatusFilter(filter)}>{filter}</Button>
-              ))}
-              {(['ALL', 'TRANSFER', 'DEPOSIT'] as TxFilter[]).map((filter) => (
-                <Button key={filter} variant={typeFilter === filter ? 'contained' : 'outlined'} onClick={() => setTypeFilter(filter)}>{filter}</Button>
-              ))}
+            <Stack spacing={2} sx={{ mb: 2 }}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Status</Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {(['ALL', 'COMPLETED', 'FAILED', 'PENDING'] as StatusFilter[]).map((filter) => (
+                    <Button key={filter} variant={statusFilter === filter ? 'contained' : 'outlined'} onClick={() => setStatusFilter(filter)}>
+                      {filter === 'ALL' ? `All (${statusCounts.ALL})` : `${filter[0] + filter.slice(1).toLowerCase()} (${statusCounts[filter]})`}
+                    </Button>
+                  ))}
+                </Stack>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Type</Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {(['ALL', 'TRANSFER', 'DEPOSIT'] as TxFilter[]).map((filter) => (
+                    <Button key={filter} variant={typeFilter === filter ? 'contained' : 'outlined'} onClick={() => setTypeFilter(filter)}>
+                      {filter === 'ALL' ? `All (${typeCounts.ALL})` : `${filter[0] + filter.slice(1).toLowerCase()} (${typeCounts[filter]})`}
+                    </Button>
+                  ))}
+                </Stack>
+              </Box>
+              {(statusFilter !== 'ALL' || typeFilter !== 'ALL') && (
+                <Box>
+                  <Button variant="text" onClick={clearTransactionFilters}>Clear Filters</Button>
+                </Box>
+              )}
             </Stack>
-            {filteredTransactions.length === 0 ? (
+            {!hasTransactions ? (
               <Box sx={{ py: 5, textAlign: 'center' }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>No transactions yet</Typography>
                 <Typography color="text.secondary">Your transfers and deposits will appear here.</Typography>
+              </Box>
+            ) : !hasFilteredTransactions ? (
+              <Box sx={{ py: 5, textAlign: 'center' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>No matching transactions</Typography>
+                <Typography color="text.secondary" sx={{ mb: 2 }}>Try changing or clearing your filters.</Typography>
+                <Button variant="outlined" onClick={clearTransactionFilters}>Clear Filters</Button>
               </Box>
             ) : (
               <TableContainer>
